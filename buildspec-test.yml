@@ -1,0 +1,45 @@
+version: 0.2
+
+phases:
+  install:
+    on-failure: ABORT
+    runtime-versions:
+      nodejs: 22
+    commands:
+      - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+      - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - npm install -g yarn
+      - npm install -g mochawesome-merge
+      - npm install -g mochawesome-report-generator
+  pre_build:
+    on-failure: ABORT
+    commands:
+      - echo Stop all running containers
+      - docker run -d public.ecr.aws/docker/library/node:22-bullseye
+      - docker rm -f $(docker ps -a -q)
+  build:
+    on-failure: ABORT
+    commands:
+      - echo Build started on `date`
+      - export DOCKER_BUILDKIT=1
+      - export COMPOSE_DOCKER_CLI_BUILD=1
+      - docker build -f dockerfiles/test.dockerfile -t bookipi_web_cypress:latest .
+      - sh ./scripts/build.sh
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - docker compose up -d --build web
+      - docker compose build test
+      - echo Testing started on `date`
+      - Xvfb :99 &
+      - node scripts/cypress-tests.js
+      - echo Testing completed on `date`
+      - pkill Xvfb
+      - docker compose down
+
+reports:
+  bookipi-accounting-web-cypress-report-group:
+    files:
+      - '**/*'
+    base-directory: 'cypress/reports'

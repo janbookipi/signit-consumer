@@ -1,0 +1,39 @@
+version: 0.2
+
+phases:
+  install:
+    on-failure: ABORT
+    runtime-versions:
+      nodejs: 22
+    commands:
+      - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+      - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
+      - npm install -g yarn
+      - npm install -g @bookipi/cli
+      - nohup /usr/local/bin/dockerd --host=unix:///var/run/docker.sock --host=tcp://127.0.0.1:2375 --storage-driver=overlay2 &
+      - timeout 15 sh -c "until docker info; do echo .; sleep 1; done"
+  pre_build:
+    on-failure: ABORT
+    commands:
+      - echo Stop all running containers
+      - docker run -d public.ecr.aws/docker/library/node:22-bullseye
+      - docker rm -f $(docker ps -a -q)
+  build:
+    on-failure: ABORT
+    commands:
+      - echo Build started on `date`
+      - sh ./scripts/build.sh
+  post_build:
+    on-failure: ABORT
+    commands:
+      - echo Build completed on `date`
+      - APP_VERSION="$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION$CUSTOM_VERSION | head -c 8)"
+      - FRONTEND_VERSION="$(date +"%Y%m%d%H%M%S")$APP_VERSION"
+      - if [ "$IGNORE_DEPLOY" = "true" ]; then echo ignore deployment; else bookipi-cli reactwebapp-deploy $APP_DOMAIN $FRONTEND_VERSION ./build -n 5 -k 15 -p "/*"; fi;
+      - echo Sync version config
+      - sh ./scripts/sync-version.sh
+artifacts:
+  files:
+    - '**/*'
+  base-directory: build
+
