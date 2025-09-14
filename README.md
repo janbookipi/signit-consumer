@@ -1,4 +1,6 @@
-# Bookipi Accounting Web(v2-web)
+# A repo to test the build process of signit's consuming projects
+
+## An exact copy of Bookipi Accounting Web(v2-web)
 
 Web frontend for bookipi
 
